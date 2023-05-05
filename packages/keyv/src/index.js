@@ -243,6 +243,7 @@ class Keyv extends EventEmitter {
   }
 
   getSet(key, value, ttl) {
+    const keyPrefixed = this._getKeyPrefix(key);
     if (typeof ttl === "undefined") {
       ttl = this.opts.ttl;
     }
@@ -253,65 +254,23 @@ class Keyv extends EventEmitter {
 
     const { store } = this.opts;
     const isArray = Array.isArray(key);
-    const keyPrefixed = isArray
-      ? this._getKeyPrefixArray(key)
-      : this._getKeyPrefix(key);
-    if (isArray && store.getMany === undefined) {
-      const promises = [];
-      for (const key of keyPrefixed) {
-        promises.push(
-          Promise.resolve()
-            .then(() => {
-              const expires = typeof ttl === "number" ? Date.now() + ttl : null;
-              if (typeof value === "symbol") {
-                this.emit("error", "symbol cannot be serialized");
-              }
-
-              value = { value, expires };
-              return this.opts.serialize(value);
-            })
-
-            .then((value) => store.getSet(key, value, ttl))
-            .then((data) =>
-              typeof data === "string"
-                ? this.opts.deserialize(data)
-                : this.opts.compression
-                ? this.opts.deserialize(data)
-                : data
-            )
-            .then((data) => {
-              if (data === undefined || data === null) {
-                return undefined;
-              }
-
-              if (
-                typeof data.expires === "number" &&
-                Date.now() > data.expires
-              ) {
-                // don't delete, but also don't return the expired value
-                return undefined;
-              }
-
-              // return options && options.raw ? data : data.value;
-              return data.value;
-            })
-        );
-      }
-
-      return Promise.allSettled(promises).then((values) => {
-        const data = [];
-        for (const value of values) {
-          data.push(value.value);
+    return Promise.resolve()
+      .then(() => {
+        if (isArray) {
+          this.emit("error", "getSet does not support arrays");
+          return undefined;
+        }
+        const expires = typeof ttl === "number" ? Date.now() + ttl : null;
+        if (typeof value === "symbol") {
+          this.emit("error", "symbol cannot be serialized");
         }
 
-        return data;
-      });
-    }
-
-    return Promise.resolve()
-      .then(() =>
-        isArray ? store.getMany(keyPrefixed) : store.get(keyPrefixed)
-      )
+        value = { value, expires };
+        return this.opts.serialize(value);
+      })
+      .then((value) => {
+        return store.getSet(keyPrefixed, value, ttl);
+      })
       .then((data) =>
         typeof data === "string"
           ? this.opts.deserialize(data)
@@ -323,36 +282,12 @@ class Keyv extends EventEmitter {
         if (data === undefined || data === null) {
           return undefined;
         }
-
-        if (isArray) {
-          const result = [];
-
-          for (let row of data) {
-            if (typeof row === "string") {
-              row = this.opts.deserialize(row);
-            }
-
-            if (row === undefined || row === null) {
-              result.push(undefined);
-              continue;
-            }
-
-            if (typeof row.expires === "number" && Date.now() > row.expires) {
-              this.delete(key).then(() => undefined);
-              result.push(undefined);
-            } else {
-              result.push(options && options.raw ? row : row.value);
-            }
-          }
-
-          return result;
-        }
-
         if (typeof data.expires === "number" && Date.now() > data.expires) {
-          return this.delete(key).then(() => undefined);
+          return undefined;
         }
 
-        return options && options.raw ? data : data.value;
+        // return options && options.raw ? data : data.value;
+        return data.value;
       });
   }
 
