@@ -33,6 +33,27 @@ class KeyvRedis extends EventEmitter {
 			});
 	}
 
+	getSet(key, value, ttl) {
+		let extraArgs = [];
+		if (typeof ttl === 'number') {
+			extraArgs = ['PX', ttl];
+		}
+		return this.redis
+      .getset(key, value, ...extraArgs)
+      .then((value) => {
+        if (value === null) {
+          return undefined;
+        }
+
+        return value;
+      })
+      .then((value) => {
+				this.redis.sadd(this._getNamespace(), key);
+				return value
+			});
+	}
+
+
 	getMany(keys) {
 		return this.redis.mget(keys)
 			.then(rows => rows);
