@@ -14,6 +14,7 @@ declare class KeyvRedis<Value=any> extends EventEmitter implements Store<Value> 
 	getMany?(
 		keys: string[]
 	): Array<StoredData<Value>> | Promise<Array<StoredData<Value>>> | undefined;
+	getSet(key: string, value: Value, ttl?: number): any;
 	set(key: string, value: Value, ttl?: number): any;
 	delete(key: string): boolean | Promise<boolean>;
 	deleteMany(keys: string[]): boolean;
