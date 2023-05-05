@@ -40,6 +40,7 @@ declare class Keyv<Value = any, Options extends Record<string, any> = Record<str
 	Array<(Raw extends false ? Value : Keyv.DeserializedData<Value>) | undefined>
 	>;
 
+	getSet(key: string, value: Value, ttl?: number): Promise<Value>;
 	/**
      * Set a value.
      *
