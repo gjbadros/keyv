@@ -31,27 +31,31 @@ class KeyvRedis extends EventEmitter {
       return value;
     });
   }
-
   getSet(key, value, ttl) {
     return this.redis
-      .getset(key, value) //, ...extraArgs)
-      .then((value) => {
-        // ioredis doesn't support expiry on getset
-        const theTtl = Math.round(ttl ?? this.opts.ttl);
-        if (typeof theTtl == "number") {
-          // keyv uses ttl in milliseconds
-          // so we use redis pexpire, not expire
-          this.redis.pexpire(key, theTtl);
-        }
-        if (value === null) {
-          return undefined;
-        }
+      .ttl(key) // Get existing TTL
+      .then((existingTtl) =>
+        this.redis
+          .getset(key, value) // Replace the value
+          .then((oldValue) => {
+            const newTtl = Math.round(ttl ?? this.opts.ttl);
 
-        return value;
-      })
-      .then((value) => {
-        this.redis.sadd(this._getNamespace(), key);
-        return value;
+            // If the previous TTL was valid, restore it
+            if (existingTtl > 0) {
+              return this.redis.expire(key, existingTtl).then(() => oldValue);
+            }
+
+            // Otherwise, apply the new TTL if valid
+            if (typeof newTtl === "number" && !isNaN(newTtl)) {
+              return this.redis.pexpire(key, newTtl).then(() => oldValue);
+            }
+
+            return oldValue;
+          })
+      )
+      .then((oldValue) => {
+        this.redis.sadd(this._getNamespace(), key); // Track key
+        return oldValue === null ? undefined : oldValue;
       });
   }
 
