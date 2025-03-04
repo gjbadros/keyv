@@ -38,7 +38,7 @@ class KeyvRedis extends EventEmitter {
       .then((value) => {
         // ioredis doesn't support expiry on getset
         const theTtl = Math.round(ttl ?? this.opts.ttl);
-        if (typeof theTtl == "number") {
+        if (!isNaN(theTtl) && typeof theTtl == "number") {
           // keyv uses ttl in milliseconds
           // so we use redis pexpire, not expire
           this.redis.pexpire(key, theTtl);
