@@ -33,23 +33,29 @@ class KeyvRedis extends EventEmitter {
   }
   getSet(key, value, ttl) {
     return this.redis
-      .ttl(key) // Get existing TTL before `getset`
-      .then((existingTtl) => {
-        return this.redis
-          .getset(key, value) // Replace the value
-          .then((oldValue) => {
-            // Restore previous TTL if it existed
-            if (existingTtl > 0) {
-              this.redis.expire(key, existingTtl);
-            } else {
-              const theTtl = Math.round(ttl ?? this.opts.ttl);
-              // Important JS Note: typeof NaN == 'number'
-              if (typeof theTtl === "number" && !isNaN(theTtl)) {
-                // Apply new TTL in millis
-                this.redis.pexpire(key, Math.round(ttl));
-              }
-            }
-          });
+      .multi() // Start a transaction
+      .ttl(key) // Get current TTL
+      .getset(key, value) // Replace the value
+      .exec()
+      .then((results) => {
+        const [existingTtl, oldValue] = results.map((r) => r[1]); // Extract results
+
+        // Determine final TTL
+        let theTtl = Math.round(ttl ?? this.opts.ttl);
+        if (isNaN(theTtl)) {
+          theTtl = undefined; // Prevent NaN from being applied
+        }
+
+        if (existingTtl > 0) {
+          this.redis.expire(key, existingTtl); // Restore previous TTL if it existed
+        } else if (theTtl !== undefined) {
+          this.redis.pexpire(key, theTtl); // Apply new TTL
+        }
+
+        // Track the key in the namespace
+        this.redis.sadd(this._getNamespace(), key);
+
+        return oldValue === null ? undefined : oldValue;
       });
   }
 
